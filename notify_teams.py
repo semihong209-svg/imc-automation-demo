@@ -67,26 +67,39 @@ def classify(end_str, today):
     return None, None
 
 
-def build_adaptive_card(expired, expiring, today):
+def build_adaptive_card(expired, expiring, opening, today):
     body = [
         {
             "type": "TextBlock",
             "size": "Large",
             "weight": "Bolder",
-            "text": "🔔 IMC 일정 등록 알림"
+            "text": "🔔 IMC 일정 알림"
         },
         {
             "type": "TextBlock",
             "wrap": True,
             "isSubtle": True,
             "text": f"기준일: {today.strftime('%Y-%m-%d')} (KST)"
-        },
-        {
-            "type": "TextBlock",
-            "wrap": True,
-            "text": "담당 채널 중 **일정 등록이 필요한 항목**이 있어 알려드립니다."
         }
     ]
+
+    if opening:
+        body.append({
+            "type": "TextBlock",
+            "weight": "Bolder",
+            "color": "Good",
+            "text": "🎉 오늘 오픈 기획전"
+        })
+        lines = []
+        for brand, channel, name, end in opening:
+            label = name if name else "(기획전명 없음)"
+            end_label = f"  `~{end}`" if end else ""
+            lines.append(f"• **[{brand}] {channel}** — {label}{end_label}")
+        body.append({
+            "type": "TextBlock",
+            "wrap": True,
+            "text": "\n\n".join(lines)
+        })
 
     if expired:
         body.append({
@@ -189,16 +202,28 @@ def main():
         elif status == "expiring":
             expiring.append((brand, channel, days, end_str))
 
+    opening = []
+    for item in items:
+        start = parse_date(item.get("START_DATE"))
+        if start == today:
+            opening.append((
+                item.get("BRAND"),
+                item.get("CHANNEL"),
+                item.get("PROMOTION_NAME", ""),
+                item.get("END_DATE", "")
+            ))
+
     expired.sort(key=lambda x: -x[2])
     expiring.sort(key=lambda x: x[2])
+    opening.sort(key=lambda x: (x[0] or "", x[1] or ""))
 
-    print(f"[info] expired={len(expired)}, expiring={len(expiring)}")
+    print(f"[info] expired={len(expired)}, expiring={len(expiring)}, opening={len(opening)}")
 
-    if not expired and not expiring:
+    if not expired and not expiring and not opening:
         print("✅ 알림 대상 없음. 발송 스킵.")
         return
 
-    card = build_adaptive_card(expired, expiring, today)
+    card = build_adaptive_card(expired, expiring, opening, today)
 
     if dry_run:
         print("[dry-run] 발송 생략. Adaptive Card 미리보기:")
